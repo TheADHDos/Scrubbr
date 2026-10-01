@@ -35,7 +35,18 @@ def client(tmp_path, monkeypatch):
     conn.commit()
     conn.close()
 
-    c = TestClient(main.app)
+    class BrowserClient(TestClient):
+        def request(self, method, url, **kwargs):
+            if method.upper() not in {"GET", "HEAD", "OPTIONS"}:
+                if not self.cookies.get("scrubbr_csrf"):
+                    self.get("/profiles")
+                data = dict(kwargs.get("data") or {})
+                data["csrf_token"] = self.cookies.get("scrubbr_csrf")
+                kwargs["data"] = data
+                kwargs["headers"] = {**(kwargs.get("headers") or {}), "Origin": "http://127.0.0.1:3000"}
+            return super().request(method, url, **kwargs)
+
+    c = BrowserClient(main.app, base_url="http://127.0.0.1:3000")
     c.broker_id = broker_id
     c.profile_id = profile.id
     return c
@@ -219,7 +230,7 @@ class FakeSmtp:
     def __init__(self, host, port):
         self.sent = []
 
-    def starttls(self):
+    def starttls(self, *, context):
         pass
 
     def login(self, u, p):

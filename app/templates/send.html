@@ -48,6 +48,7 @@ re-sends and form-only brokers stay a manual click from the broker list.</p>
     breaks both the layout and which checkboxes actually submit. Every checkbox
     and button below points at this form by id instead. -->
     <form id="send-all-form" method="post" action="/send/all">
+        <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
         <input type="hidden" name="profile_id" value="{{ profile.id }}">
     </form>
     <div class="table-wrap">

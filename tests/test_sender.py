@@ -5,14 +5,14 @@ from app.models import Broker
 
 
 class FakeSmtp:
-    def __init__(self, host, port):
+    def __init__(self, host, port, **kwargs):
         self.host, self.port = host, port
         self.started_tls = False
         self.login_args = None
         self.sent = []
         self.quit_called = False
 
-    def starttls(self):
+    def starttls(self, *, context):
         self.started_tls = True
 
     def login(self, username, password):
@@ -79,7 +79,7 @@ def test_subject_tag_survives_into_the_message(profile):
 def test_open_smtp_starttls_then_login(monkeypatch):
     fake = None
 
-    def factory(host, port):
+    def factory(host, port, **kwargs):
         nonlocal fake
         fake = FakeSmtp(host, port)
         return fake
@@ -97,7 +97,7 @@ def test_open_smtp_starttls_then_login(monkeypatch):
 def test_open_smtp_ssl_skips_starttls(monkeypatch):
     fake = None
 
-    def factory(host, port):
+    def factory(host, port, **kwargs):
         nonlocal fake
         fake = FakeSmtp(host, port)
         return fake

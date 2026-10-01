@@ -12,3 +12,20 @@ scan_profile.toml
 .DS_Store
 settings.local.json
 docs/
+
+# Local privacy protections added during setup.
+*.db-wal
+*.db-shm
+*.db.*
+*.sqlite
+*.sqlite3
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite3-wal
+*.sqlite3-shm
+config.toml.*
+scan_profile.toml.*
+.env
+.env.*
+.runtime/
+.playwright-cli/
