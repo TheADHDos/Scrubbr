@@ -327,6 +327,40 @@ verdicted `not_found` are eligible; follow-up re-sends and form-only brokers
 always stay manual. A full run of the ~75 email-capable brokers takes several
 minutes and is well under Gmail's ~500 recipients/day limit.
 
+## Property flags and court-transfer notices
+
+Open **Property flags** (`/properties`) to filter the public Radaris property
+list by court-ordered domain transfer or related property, and search by name
+or domain. Fifteen domains are explicitly named in Atlas's published notices
+for the June 12 and August 27, 2026 judgments (NJ case MID-L-000847-24).
+Each entry includes its judgment date, source link and review date. Sources:
+[Centeda notice](https://centeda.com/) and
+[Trustoria notice](https://trustoria.com/), reviewed October 1, 2026.
+
+Other people-search/professional properties and Radaris domains from the
+supplied relationship diagram are marked **Related property — impact
+unconfirmed**. This is a partial reference list; the diagram's affiliation
+claims were not independently verified. The judgments themselves have not
+been independently retrieved. A court-transfer flag is not proof of deletion
+of your data, current site availability, or a determination of the injunction's
+reach over every affiliate.
+
+Matching flags appear beside removal records, on edit forms and in the broker
+directory. Use the **Property flag** filter in Removal history to find your
+matching records. The listing URL takes precedence over the site name: a record
+on `radaris.net` cannot inherit `radaris.com`'s transfer flag. Matching strips
+`www.` only; other subdomains and unrelated domains are not inferred. With no
+listing URL, a curated exact name/domain spelling is used. Unknown properties
+receive no flag. Flags do not alter statuses, exposure verdicts, dates, broker
+IDs or history, and never propagate through the shared-owner network.
+
+This feature reads a small curated public list in `app/property_flags.py`.
+Viewing and filtering are entirely local; external source pages open only when
+clicked. There are no scheduled checks, automatic updates, new dependencies or
+database migrations. Public flags ship with the application rather than the
+private tracker backup. Future factual changes require manual source review
+and a code change.
+
 ## Tests
 
 ```sh

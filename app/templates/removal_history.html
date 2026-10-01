@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_property_flag.html" import show_flag %}
 {% block title %}Removal history &middot; Scrubbr{% endblock %}
 {% block body %}
 <h1>Removal history</h1>
@@ -10,7 +11,7 @@
     <a href="/history?due=follow_up"><strong>{{ counts.follow_up }}</strong> follow-ups due</a>
     <a href="/history?due=recheck"><strong>{{ counts.recheck }}</strong> rechecks due</a>
 </div>
-<p><a class="btn" href="/history/new">Add removal record</a></p>
+<p><a class="btn" href="/history/new">Add removal record</a> · <a href="/properties?impact=transferred">View court-transfer properties</a></p>
 <section aria-label="Manual action queue">
 <h2>Due this week</h2>
 <p class="muted">Next seven local calendar dates: {{ today }} through {{ week_end }}. Follow-ups and rechecks are manual. Open a record, follow its notes, then record your update and move or clear its date.</p>
@@ -20,7 +21,7 @@
 <div class="table-wrap"><table class="weekly-queue">
     <thead><tr><th>Website</th><th>Status</th><th>Due date</th><th>Action</th></tr></thead>
     <tbody>{% for action in queue[group] %}<tr>
-        <td><a href="/history/{{ action.record.id }}/edit">{{ action.record.site_name }}</a></td>
+        <td><a href="/history/{{ action.record.id }}/edit">{{ action.record.site_name }}</a>{{ show_flag(property_flags[action.record.id], property_labels) }}</td>
         <td data-label="Status">{{ statuses[action.record.status] }}</td>
         <td data-label="Due date">{{ action.date }}</td>
         <td data-label="Action">{{ 'Follow up' if action.kind == 'follow_up' else 'Recheck' }}</td>
@@ -45,8 +46,11 @@
             <option value="recheck" {% if selected_due == 'recheck' %}selected{% endif %}>Rechecks due</option>
         </select>
     </label>
+    <label>Property flag
+        <select name="impact"><option value="">All properties</option>{% for key, label in property_labels.items() %}<option value="{{ key }}" {% if selected_impact == key %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+    </label>
     <button type="submit">Filter</button>
-    {% if selected_status or selected_due %}<a href="/history">Clear filters</a>{% endif %}
+    {% if selected_status or selected_due or selected_impact %}<a href="/history">Clear filters</a>{% endif %}
 </form>
 <p class="muted">Showing {{ records|length }} of {{ counts.total }} records. Due dates include today. Move or clear a date after completing its task.</p>
 {% endif %}
@@ -59,6 +63,7 @@
     <tr>
         <td>
             <strong>{{ record.site_name }}</strong>
+            {{ show_flag(property_flags[record.id], property_labels) }}
             {% if record.listing_url %}<p><a href="{{ record.listing_url }}" target="_blank" rel="noopener noreferrer">Open listing</a></p>{% endif %}
             <details><summary>Details</summary>
                 <dl>

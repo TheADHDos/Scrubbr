@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Property flags &middot; Scrubbr{% endblock %}
+{% block body %}
+<h1>Property flags</h1>
+<p>Quickly identify domains named in the Radaris court-transfer notices and related properties from the supplied relationship diagram.</p>
+<p class="muted">A domain transfer does not establish that your data was deleted. These public flags never change your removal outcomes, exposure verdicts, or dates. Related properties have no confirmed transfer in this list; affiliation alone does not establish the order's effect on a particular site.</p>
+<p class="muted">Reviewed {{ reviewed }} against the published Atlas notices, not an independently obtained court judgment. No live availability checks or automatic updates.</p>
+<form class="filters" method="get" action="/properties">
+    <label>Property flag<select name="impact"><option value="">All flags</option>{% for key, label in labels.items() %}<option value="{{ key }}" {% if impact == key %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+    <label>Search<input type="search" name="q" value="{{ query }}" placeholder="Domain or property name"></label>
+    <button type="submit">Filter</button>
+    {% if impact or query %}<a href="/properties">Clear filters</a>{% endif %}
+</form>
+<p>Showing {{ entries|length }} of {{ total }} properties.</p>
+{% for entry in entries %}
+<section id="{{ entry.domain }}">
+    <h2>{{ entry.domain }}</h2>
+    <p><strong>{{ labels[entry.impact] }}</strong></p>
+    <dl>
+        <dt>Property</dt><dd>{{ entry.name }}</dd>
+        {% if entry.judgment_date %}<dt>Judgment date</dt><dd>{{ entry.judgment_date }}</dd><dt>Case</dt><dd>{{ entry.case }}</dd>{% endif %}
+        <dt>Reviewed</dt><dd>{{ entry.reviewed_date }}</dd>
+        <dt>Source</dt><dd>{% if entry.source_url %}<a href="{{ entry.source_url }}" target="_blank" rel="noopener noreferrer">{{ entry.source_label }}</a>{% else %}{{ entry.source_label }}{% endif %}</dd>
+    </dl>
+</section>
+{% else %}<p>No properties match these filters.</p>{% endfor %}
+{% endblock %}

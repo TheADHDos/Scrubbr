@@ -16,7 +16,7 @@ from fastapi.templating import Jinja2Templates
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from .security import LocalBrowserProtection
-from . import removal_history, broker_guidance
+from . import removal_history, broker_guidance, property_flags
 
 from . import db, fetcher, inbox, ratelimit, scan_service, scanner, send_service, sender, templater
 from .config import ROOT, DEFAULT_DB_PATH, load_config
@@ -236,6 +236,7 @@ def broker_list(request: HttpRequest, category: str = "", status: str = "",
         categories = sorted({b.category for b in brokers})
         return views.TemplateResponse(request=request, name="brokers.html", context={
             "request": request, "rows": rows, "categories": categories,
+            "property_flag_for": property_flags.flag_for, "property_labels": property_flags.LABELS,
             "sel_category": category, "sel_status": status, "sel_exposure": exposure,
             "sel_name": name,
             "hidden": hidden, "show_all": bool(show_all),
@@ -773,7 +774,7 @@ def poll_inbox():
 
 # Manual records are independent of broker automation and personal profiles.
 @app.get("/history", response_class=HTMLResponse)
-def removal_history_page(request: HttpRequest, status: str = "", due: str = ""):
+def removal_history_page(request: HttpRequest, status: str = "", due: str = "", impact: str = ""):
     conn = get_conn()
     try:
         records = db.removal_records(conn)
@@ -790,16 +791,21 @@ def removal_history_page(request: HttpRequest, status: str = "", due: str = ""):
         "follow_up": sum(removal_history.is_due(r["follow_up_date"], today) for r in records),
         "recheck": sum(removal_history.is_due(r["recheck_date"], today) for r in records),
     }
+    selected_impact = impact if impact in property_flags.LABELS else ""
+    flags = {r["id"]: property_flags.flag_for(r["site_name"], r["listing_url"]) for r in records}
     selected_status = status if status in removal_history.STATUSES else ""
     selected_due = due if due in {"follow_up", "recheck"} else ""
     rows = [r for r in records if not selected_status or r["status"] == selected_status]
     if selected_due:
         rows = [r for r in rows if removal_history.is_due(r[selected_due + "_date"], today)]
         rows.sort(key=lambda r: (r[selected_due + "_date"], r["site_name"].casefold(), r["id"]))
+    if selected_impact:
+        rows = [r for r in rows if flags[r["id"]] and flags[r["id"]]["impact"] == selected_impact]
     return views.TemplateResponse(request=request, name="removal_history.html", context={
         "records": rows, "counts": counts, "today": today,
         "statuses": removal_history.STATUSES, "methods": removal_history.METHODS,
         "selected_status": selected_status, "selected_due": selected_due,
+        "property_flags": flags, "property_labels": property_flags.LABELS, "selected_impact": selected_impact,
         "queue": queue, "week_end": (local_date + timedelta(days=6)).isoformat(),
     })
 
@@ -821,6 +827,8 @@ def removal_record_form(request, record=None, errors=None, status_code=200):
         "record": values, "errors": errors or {}, "statuses": removal_history.STATUSES,
         "methods": removal_history.METHODS,
         "brokers": brokers, "history": history, "check_outcomes": removal_history.CHECK_OUTCOMES,
+        "property_flag": property_flags.flag_for(selected_broker.name if selected_broker else values["site_name"], values["listing_url"]),
+        "property_labels": property_flags.LABELS,
         "guide": guide, "catalog": catalog, "guide_priorities": broker_guidance.PRIORITIES,
         "guide_flags": broker_guidance.FLAGS,
     }, status_code=status_code)
@@ -844,6 +852,16 @@ def new_removal_record(request: HttpRequest, guide: str = ""):
     finally:
         conn.close()
     return removal_record_form(request, values)
+
+
+@app.get("/properties", response_class=HTMLResponse)
+def property_flags_page(request: HttpRequest, impact: str = "", q: str = ""):
+    impact = impact if impact in property_flags.LABELS else ""
+    q = q[:200]
+    return views.TemplateResponse(request=request, name="property_flags.html", context={
+        "entries": property_flags.filtered(impact, q), "total": len(property_flags.ENTRIES),
+        "labels": property_flags.LABELS, "impact": impact, "query": q, "reviewed": property_flags.REVIEWED,
+    })
 
 
 @app.get("/guidance", response_class=HTMLResponse)

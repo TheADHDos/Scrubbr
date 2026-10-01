@@ -1,0 +1,3 @@
+{% macro show_flag(flag, labels) %}
+{% if flag %}<p class="property-flag"><a href="/properties#{{ flag.domain }}">{{ labels[flag.impact] }}</a><br><span class="muted">{{ flag.domain }}</span></p>{% endif %}
+{% endmacro %}

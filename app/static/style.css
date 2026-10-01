@@ -808,3 +808,5 @@ dd {
     font-weight: 700;
   }
 }
+
+.property-flag { font-size: .85rem; overflow-wrap: anywhere; }

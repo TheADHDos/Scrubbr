@@ -1,10 +1,13 @@
 {% extends "base.html" %}
 {% from "_broker_guidance.html" import show_guide %}
+{% from "_property_flag.html" import show_flag %}
 {% block title %}{{ 'Edit' if record.get('id') else 'Add' }} removal record &middot; Scrubbr{% endblock %}
 {% block body %}
 <p><a href="/history">&larr; Removal history</a></p>
 <h1>{{ 'Edit' if record.get('id') else 'Add' }} removal record</h1>
 <p class="muted">Stored locally without encryption. Listing and evidence links may identify you; avoid passwords or verification codes in notes.</p>
+{{ show_flag(property_flag, property_labels) }}
+{% if property_flag %}<p class="muted">This property flag does not change your removal outcome. Verify your listing separately.</p>{% endif %}
 {% if guide %}
 <details class="record-guidance"><summary>Manual opt-out guidance for {{ guide.name }}</summary>
     {{ show_guide(guide, catalog, guide_priorities, guide_flags) }}

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_property_flag.html" import show_flag %}
 {% from "_badges.html" import exposure_badge, status_badge with context %}
 {% from "_sort.html" import sort_th with context %}
 {% block title %}Brokers &middot; Scrubbr{% endblock %}
@@ -61,7 +62,7 @@
     <tbody>
     {% for broker, profile, r, exposure in rows %}
         <tr>
-            <td data-label="Broker"><a href="/broker/{{ broker.id }}?profile_id={{ profile.id }}">{{ broker.name }}</a></td>
+            <td data-label="Broker"><a href="/broker/{{ broker.id }}?profile_id={{ profile.id }}">{{ broker.name }}</a>{{ show_flag(property_flag_for(broker.name, broker.website), property_labels) }}</td>
             {% if multi_profile %}<td data-label="Profile" class="muted">{{ profile.name }}</td>{% endif %}
             <td data-label="Category" class="muted">{{ broker.category }}</td>
             <td data-label="Method" class="muted">{{ broker.contact_method }}</td>
