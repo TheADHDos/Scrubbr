@@ -18,7 +18,15 @@
 {% endmacro %}
 <form method="post" action="{{ '/history/' ~ record.id if record.get('id') else '/history' }}" class="profile">
     <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
-    {{ input('site_name', 'Website name (required)', required=true, maxlength=200) }}
+    <label>Site from broker directory (optional)
+        <select name="broker_id">
+            <option value="">Custom site — enter its name below</option>
+            {% for broker in brokers %}<option value="{{ broker.id }}" {% if record.broker_id == broker.id|string %}selected{% endif %}>{{ broker.name }}</option>{% endfor %}
+        </select>
+        {{ field_error('broker_id') }}
+    </label>
+    {{ input('site_name', 'Website name (required for a custom site)', maxlength=200) }}
+    <p class="muted">This records past activity only. Separate attempts get separate records; adding another record never overwrites an earlier attempt. Leave unknown dates blank.</p>
     {{ input('listing_url', 'Listing URL (optional)', type='url') }}
     {{ input('request_date', 'Request date (optional)', type='date') }}
     <label>Removal method
@@ -36,6 +44,13 @@
     </label>
     {{ input('evidence_url', 'Confirmation or evidence URL (optional)', type='url') }}
     {{ input('last_checked_date', 'Last checked date (optional)', type='date') }}
+    <label>Last manual check outcome
+        <select name="check_outcome">
+            {% for value, label in check_outcomes.items() %}<option value="{{ value }}" {% if record.check_outcome == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+        {{ field_error('check_outcome') }}
+        <span class="muted">An inconclusive check is not verification. Saving never changes the outcome automatically.</span>
+    </label>
     {{ input('follow_up_date', 'Follow-up date (optional)', type='date') }}
     {{ input('recheck_date', 'Next recheck date (optional)', type='date') }}
     <label>Notes (optional)
@@ -46,6 +61,20 @@
     <a href="/history">Cancel</a>
 </form>
 {% if record.get('id') %}
+<h2>Manual history</h2>
+<p class="muted">Each saved edit retains its previous values. Baselines describe existing records when history was introduced, not earlier unrecorded activity. Deleting a record also deletes its history.</p>
+{% for event in history %}
+<details><summary>{{ event.at }} — {{ event.action|replace('_', ' ') }} — {{ statuses[event['values'].status] }}</summary>
+    <dl>
+        <dt>Original request date</dt><dd>{{ event.effective_date or 'Unknown' }}</dd>
+        <dt>Follow up</dt><dd>{{ event['values'].follow_up_date or 'Not set' }}</dd>
+        <dt>Recheck</dt><dd>{{ event['values'].recheck_date or 'Not set' }}</dd>
+        <dt>Manual check</dt><dd>{{ event['values'].last_checked_date or 'Unknown' }} — {{ check_outcomes[event['values'].get('check_outcome', '')] }}</dd>
+        <dt>Notes</dt><dd class="history-notes">{{ event['values'].notes or 'No notes' }}</dd>
+        <dt>Evidence reference</dt><dd>{{ event['values'].evidence_url or 'Not recorded' }}</dd>
+    </dl>
+</details>
+{% endfor %}
 <form class="history-delete" method="post" action="/history/{{ record.id }}/delete" onsubmit="return confirm('Delete this removal record? This cannot be undone.');">
     <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
     <button class="btn-secondary" type="submit">Delete record</button>

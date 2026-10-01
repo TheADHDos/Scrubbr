@@ -8,6 +8,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from app import db  # noqa: E402
 
 
+@pytest.fixture(autouse=True)
+def isolated_server_lock(tmp_path, monkeypatch):
+    # TestClient's lifespan must never touch the user's storage, even for locking.
+    from app import main
+    monkeypatch.setattr(main, "DEFAULT_DB_PATH", tmp_path / "server.db")
+
+
 @pytest.fixture
 def conn(tmp_path):
     c = db.connect(tmp_path / "test.db")

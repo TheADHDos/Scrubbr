@@ -99,7 +99,10 @@ Use **Removal history** to record work already done on any website, including
 sites outside the broker directory. No personal profile is required. Add a site,
 optional listing/evidence URLs, request date and method, outcome, notes, last
 checked date, and follow-up/recheck dates. A site can have multiple records for
-separate removal attempts.
+separate removal attempts. Select a known broker from the directory or enter a
+custom site name. Directory selection uses its canonical name; it never generates
+or sends a request. Unknown dates stay blank. Completed cases can be entered
+directly as confirmed or independently verified, without fabricated prior steps.
 
 The page shows due follow-ups and rechecks (including today), with status/date
 filters. After completing a task, edit its date to move or clear it. These dates
@@ -110,9 +113,141 @@ are opened only when you click them.
 Records live in the unencrypted `removal_records` table in `scrubbr.db`. Links
 and notes may identify you. Avoid passwords or verification codes. "Removal
 confirmed" means the site acknowledged it; "Removal independently verified"
-means you checked the listing. Existing broker request/status tracking remains
-separate. Editing replaces a record's fields; this first version does not keep
-an audit log of edits, so use another record for a separate removal attempt.
+means you checked the listing. A present or inconclusive manual check cannot be
+saved as verified. Existing profile-based broker request/status tracking remains
+separate. Each saved manual edit retains a snapshot in **Manual history** on the
+edit page, including original request/effective date and entry timestamp. Existing
+records receive a labeled baseline; no earlier history is invented. Use a new
+record for a separate attempt. Deleting a record deletes its manual history too.
+
+The history page's **Due this week** queue covers the next seven local calendar
+dates, including today (`today <= date < today + 7 days`), with overdue actions
+shown separately first. It includes scheduled rechecks for confirmed/verified
+removals. Each follow-up or recheck is one action row linking to its record and
+manual notes; records without dates or beyond the window remain in the list.
+After acting, edit or clear the date. Viewing the queue never contacts websites
+or changes status. `[app].timezone` accepts an IANA timezone; empty uses the Mac's
+local timezone. Set it explicitly when running on a computer in another zone.
+
+### Encrypted local backup and restore
+
+Use the Terminal CLI below. Passphrases are prompted with hidden input, confirmed
+on creation, and never put in command arguments, configuration, or backup files.
+Use a long, unique passphrase and keep it safely yourself: losing it prevents
+recovery. Run these commands from the repository root. There is no cloud upload.
+
+```sh
+mkdir -p backups
+chmod 700 backups
+.venv/bin/python -m scripts.backup create --output backups/removals-2026-10-01.scrubbr-backup
+.venv/bin/python -m scripts.backup restore --input backups/removals-2026-10-01.scrubbr-backup --destination backups/restored-copy.db
+```
+
+Use fresh filenames every time. Restore authenticates and validates first, shows
+date/version/counts/destination (no notes or profile fields), and asks for
+`RESTORE` before creating an isolated database. It never merges records.
+
+Backups contain the **entire SQLite database**, including profiles and email
+metadata if present; the CLI discloses profile presence. Manual tracker records,
+broker relationships, and edit history need no external assets. `config.toml`,
+credentials, environment files, browser sessions, scan artifacts, and other files
+are excluded. A restored copy does not configure email; use manual-only mode
+when inspecting it on a machine with an existing email configuration.
+
+The SQLite online backup API captures a consistent snapshot, including committed
+WAL writes. Plaintext snapshot/encryption work stays in memory. AES-256-GCM
+encrypts the database and versioned manifest and authenticates the envelope;
+Argon2id derives a 32-byte key using a fresh 16-byte salt, 64 MiB of memory,
+3 iterations and 4 lanes. Each backup has a fresh 12-byte nonce and a full
+128-bit authentication tag. Parameters are fixed and validated before key
+derivation. These choices follow the APIs and guidance bundled with
+`cryptography` 50.0.2 (AESGCM and Argon2id documentation).
+
+Only recognized schema versions 0/1 are supported: version 0 is the current
+multi-profile hardening/tracker shape and migrates additively in isolated staging.
+Older singleton-profile or unknown/custom/newer schemas are rejected. Validation
+checks schema structure, SQLite integrity, foreign keys, tracker values, history,
+and manifest consistency. Database size is limited to 64 MiB. There is no archive
+extraction. Wrong passphrases and tampering share a non-sensitive error.
+
+Files are published atomically with mode `0600`; existing backup files are never
+overwritten. Backup filenames must end in `.scrubbr-backup`, and restored databases
+in `.db`, `.sqlite`, or `.sqlite3`, all ignored by Git. Restore staging files are
+plaintext with restrictive permissions, removed on handled success/failure;
+cleanup is not secure erasure and cannot be guaranteed after a forced kill or
+power loss. Memory/passphrase zeroization is not guaranteed by Python.
+Backup encryption does **not** encrypt the active database or protect an unlocked
+computer. History retains corrected notes, so avoid putting secrets in any entry.
+
+#### Safe synthetic rehearsal
+
+Do this before entering real records. The script refuses to reuse an existing
+directory and never opens your normal database or loads email configuration.
+
+```sh
+.venv/bin/python -m scripts.backup_rehearsal --directory restore-staging/demo
+.venv/bin/python -m scripts.backup create --database restore-staging/demo/original.db --output restore-staging/demo/manual.scrubbr-backup
+.venv/bin/python -m scripts.backup restore --input restore-staging/demo/manual.scrubbr-backup --destination restore-staging/demo/manual-restored.db
+.venv/bin/python -m scripts.backup_rehearsal --compare restore-staging/demo/original.db restore-staging/demo/manual-restored.db
+SCRUBBR_DB_PATH="$PWD/restore-staging/demo/manual-restored.db" SCRUBBR_MANUAL_ONLY=1 .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 3001 --no-proxy-headers --no-access-log
+```
+
+Choose a disposable test passphrase at the creation prompts, enter it at restore,
+review the counts, and type `RESTORE`. Comparison must report that every logical
+table and relationship matches. Open `http://127.0.0.1:3001/history`, inspect
+Example records and history, edit a date, and confirm the queue updates. Stop
+with Ctrl+C. Try another fresh destination with the wrong passphrase; no database
+should be created. The automated suite tests tampering, corruption, unsupported
+schemas, replacement protections and rollback on disposable databases.
+
+The rehearsal's initial automatic backup uses a random disposable passphrase in
+memory and discards it after comparison; use `manual.scrubbr-backup` to practice
+the interactive workflow. Synthetic databases are unencrypted and Git-ignored.
+
+#### Replacing a database and recovering
+
+Prefer an isolated restore. To deliberately replace an existing database, first
+stop **all** Scrubbr processes and other SQLite tools using it. New Scrubbr servers
+hold a cooperative lock throughout their lifetime; connections also take it.
+Other programs and old running versions may not honor that lock, so explicitly
+stopping them is required. Do not bypass locks or delete lock files.
+
+```sh
+.venv/bin/python -m scripts.backup restore --input backups/removals-2026-10-01.scrubbr-backup --destination scrubbr.db --replace-existing --recovery-backup backups/before-replacement.scrubbr-backup
+```
+
+Review the preview, type `REPLACE`, and choose/confirm a passphrase for the recovery
+snapshot. The current database must first be snapshotted, encrypted, published
+to a fresh filename, and successfully decrypted/validated. Any failure aborts
+replacement. The flow checks SQLite locks, checkpoints WAL, closes connections,
+handles sidecars, and atomically replaces from a restrictive staged file. On a
+handled replacement failure it attempts rollback from the in-memory snapshot.
+Retain the encrypted recovery artifact until you have inspected the result.
+
+After an interruption or failed rollback, keep the app stopped. Restore the
+recovery artifact to a fresh `.db` path using its recovery passphrase, inspect it
+with `SCRUBBR_DB_PATH` and `SCRUBBR_MANUAL_ONLY=1` as above, then deliberately
+replace the original using the same guarded restore flow. A force kill/power loss
+cannot run Python cleanup; the encrypted recovery snapshot is the recovery path.
+No live replacement is performed during development validation.
+
+#### Begin recording your completed removals
+
+After rehearsal, stop the port-3001 test server. Stop/restart your usual app with
+the current code; do not set `SCRUBBR_DB_PATH` for normal use. For a manual-only
+session that blocks scan/send/inbox routes while leaving configuration untouched:
+
+```sh
+SCRUBBR_MANUAL_ONLY=1 .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 3000 --no-proxy-headers --no-access-log
+```
+
+Open `http://127.0.0.1:3000/history` → **Add removal record**. Choose a broker or
+enter a custom site, enter the original request date if known, select the actual
+status, and optionally record brief notes/evidence and follow-up/recheck dates.
+Leave unknown dates blank. Choose confirmed only for a broker acknowledgement,
+and independently verified only after your own check. Save; no profile or email
+credentials are required. Add a separate record for another attempt. Back up to
+a new encrypted filename after meaningful updates.
 
 ### Optional: inbox monitoring
 

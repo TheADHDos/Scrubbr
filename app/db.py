@@ -5,6 +5,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from .config import DEFAULT_DB_PATH
+from .storage import database_lock
 from .models import (
     DEFAULT_FOLLOWUP_DAYS,
     EXPOSURE_SOURCE_NETWORK,
@@ -117,7 +118,25 @@ CREATE TABLE IF NOT EXISTS removal_records (
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS removal_record_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    record_id INTEGER NOT NULL REFERENCES removal_records(id) ON DELETE CASCADE,
+    at TEXT NOT NULL,
+    action TEXT NOT NULL,
+    effective_date TEXT NOT NULL DEFAULT '',
+    snapshot TEXT NOT NULL
+);
 """
+
+
+class _Connection(sqlite3.Connection):
+    def close(self):
+        try:
+            super().close()
+        finally:
+            if getattr(self, "_storage_lock", None) is not None:
+                self._storage_lock.__exit__(None, None, None)
+                self._storage_lock = None
 
 
 def connect(db_path: Path | str = DEFAULT_DB_PATH) -> sqlite3.Connection:
@@ -127,13 +146,22 @@ def connect(db_path: Path | str = DEFAULT_DB_PATH) -> sqlite3.Connection:
         old_path = db_path.parent / "incogni.db"
         if old_path.exists():
             old_path.rename(db_path)
-    conn = sqlite3.connect(db_path)
+    lock = database_lock(db_path)
+    lock.__enter__()
+    try:
+        conn = sqlite3.connect(db_path, factory=_Connection)
+    except BaseException:
+        lock.__exit__(None, None, None)
+        raise
+    conn._storage_lock = lock
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
 
 
 def init_db(conn: sqlite3.Connection) -> None:
+    if conn.execute("PRAGMA user_version").fetchone()[0] > 1:
+        raise ValueError("Unsupported newer Scrubbr database schema.")
     conn.executescript(SCHEMA)
     # Rebuilding requests_old below would otherwise cascade-delete request_history
     # rows: SQLite auto-remaps request_history's FK to the renamed table, and
@@ -142,6 +170,7 @@ def init_db(conn: sqlite3.Connection) -> None:
     _migrate(conn)
     conn.commit()
     conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA user_version = 1")
 
 
 def _migrate(conn: sqlite3.Connection) -> None:
@@ -189,6 +218,19 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE exposures ADD COLUMN snapshot TEXT DEFAULT ''")
     if exposure_cols and "fail_streak" not in exposure_cols:
         conn.execute("ALTER TABLE exposures ADD COLUMN fail_streak INTEGER DEFAULT 0")
+
+    removal_cols = {r["name"] for r in conn.execute("PRAGMA table_info(removal_records)")}
+    if "broker_id" not in removal_cols:
+        conn.execute("ALTER TABLE removal_records ADD COLUMN broker_id INTEGER REFERENCES brokers(id)")
+    if "check_outcome" not in removal_cols:
+        conn.execute("ALTER TABLE removal_records ADD COLUMN check_outcome TEXT NOT NULL DEFAULT ''")
+    # Retain an explicitly labeled baseline, without inventing earlier events.
+    for row in conn.execute("""SELECT * FROM removal_records r WHERE NOT EXISTS
+                             (SELECT 1 FROM removal_record_history h WHERE h.record_id=r.id)"""):
+        conn.execute("""INSERT INTO removal_record_history
+                      (record_id, at, action, effective_date, snapshot) VALUES (?, ?, ?, ?, ?)""",
+                     (row["id"], datetime.now().isoformat(timespec="seconds"),
+                      "imported_baseline", row["request_date"], json.dumps(dict(row))))
 
 
 # --- Brokers ---------------------------------------------------------------
@@ -523,18 +565,23 @@ def review_queue(conn: sqlite3.Connection) -> list[dict]:
 # --- Manual removal history ------------------------------------------------
 
 def removal_records(conn):
-    return [dict(row) for row in conn.execute(
+    return [_removal_record(row) for row in conn.execute(
         "SELECT * FROM removal_records ORDER BY updated_at DESC, id DESC")]
+
+
+def _removal_record(row):
+    return {**dict(row), "broker_id": str(row["broker_id"]) if row["broker_id"] is not None else ""}
 
 
 def get_removal_record(conn, record_id):
     row = conn.execute("SELECT * FROM removal_records WHERE id = ?", (record_id,)).fetchone()
-    return dict(row) if row else None
+    return _removal_record(row) if row else None
 
 
 def save_removal_record(conn, data, record_id=None):
     from .removal_history import FIELDS
     values = {field: data[field] for field in FIELDS}
+    values["broker_id"] = int(values["broker_id"]) if values["broker_id"] else None
     values['updated_at'] = datetime.now().isoformat(timespec='seconds')
     if record_id is None:
         values['created_at'] = values['updated_at']
@@ -547,8 +594,18 @@ def save_removal_record(conn, data, record_id=None):
         values['id'] = record_id
         columns = (*FIELDS, 'updated_at')
         conn.execute(f"UPDATE removal_records SET {', '.join(field+'=:'+field for field in columns)} WHERE id=:id", values)
+    snapshot = dict(conn.execute("SELECT * FROM removal_records WHERE id=?", (record_id,)).fetchone())
+    conn.execute("""INSERT INTO removal_record_history
+                 (record_id, at, action, effective_date, snapshot) VALUES (?, ?, ?, ?, ?)""",
+                 (record_id, values["updated_at"], "created" if "created_at" in values else "updated",
+                  values["request_date"], json.dumps(snapshot)))
     conn.commit()
     return record_id
+
+
+def removal_record_history(conn, record_id):
+    return [{**dict(row), "values": json.loads(row["snapshot"])} for row in conn.execute(
+        "SELECT * FROM removal_record_history WHERE record_id=? ORDER BY id DESC", (record_id,))]
 
 
 def delete_removal_record(conn, record_id):

@@ -29,3 +29,14 @@ scan_profile.toml.*
 .env.*
 .runtime/
 .playwright-cli/
+
+# Encrypted backups, restore staging, and cooperative database locks.
+backups/
+restore-staging/
+*.scrubbr-backup
+*.restore-stage
+*.backup-stage
+*.db.lock
+*.sqlite.lock
+*.sqlite3.lock
+output/playwright/

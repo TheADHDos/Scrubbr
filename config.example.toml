@@ -30,6 +30,9 @@ min_delay_s = 5
 max_delay_s = 15
 
 [app]
+# IANA timezone for the manual queue (e.g. "America/New_York"). Empty uses the
+# Mac's local timezone. Set explicitly if running on a computer in another zone.
+timezone = ""
 # Subject-line token prefix used to correlate broker replies to requests,
 # e.g. a generated subject includes "[PIR-42]". Keep it short and unique.
 request_tag_prefix = "PIR"
