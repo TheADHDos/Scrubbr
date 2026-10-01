@@ -100,6 +100,23 @@ CREATE TABLE IF NOT EXISTS scan_cooldowns (
     domain TEXT PRIMARY KEY,
     until TEXT NOT NULL
 );
+
+-- Manual records can track any website without an identifying profile.
+CREATE TABLE IF NOT EXISTS removal_records (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    site_name TEXT NOT NULL,
+    listing_url TEXT NOT NULL DEFAULT '',
+    request_date TEXT NOT NULL DEFAULT '',
+    method TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'not_requested',
+    evidence_url TEXT NOT NULL DEFAULT '',
+    last_checked_date TEXT NOT NULL DEFAULT '',
+    follow_up_date TEXT NOT NULL DEFAULT '',
+    recheck_date TEXT NOT NULL DEFAULT '',
+    notes TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
 """
 
 
@@ -501,3 +518,39 @@ def review_queue(conn: sqlite3.Connection) -> list[dict]:
         "SELECT * FROM seen_messages WHERE needs_review = 1 ORDER BY received_at DESC"
     ).fetchall()
     return [dict(r) for r in rows]
+
+
+# --- Manual removal history ------------------------------------------------
+
+def removal_records(conn):
+    return [dict(row) for row in conn.execute(
+        "SELECT * FROM removal_records ORDER BY updated_at DESC, id DESC")]
+
+
+def get_removal_record(conn, record_id):
+    row = conn.execute("SELECT * FROM removal_records WHERE id = ?", (record_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def save_removal_record(conn, data, record_id=None):
+    from .removal_history import FIELDS
+    values = {field: data[field] for field in FIELDS}
+    values['updated_at'] = datetime.now().isoformat(timespec='seconds')
+    if record_id is None:
+        values['created_at'] = values['updated_at']
+        columns = (*FIELDS, 'created_at', 'updated_at')
+        cursor = conn.execute(
+            f"INSERT INTO removal_records ({', '.join(columns)}) "
+            f"VALUES ({', '.join(':'+field for field in columns)})", values)
+        record_id = cursor.lastrowid
+    else:
+        values['id'] = record_id
+        columns = (*FIELDS, 'updated_at')
+        conn.execute(f"UPDATE removal_records SET {', '.join(field+'=:'+field for field in columns)} WHERE id=:id", values)
+    conn.commit()
+    return record_id
+
+
+def delete_removal_record(conn, record_id):
+    conn.execute("DELETE FROM removal_records WHERE id = ?", (record_id,))
+    conn.commit()

@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Removal history &middot; Scrubbr{% endblock %}
+{% block body %}
+<h1>Removal history</h1>
+<p class="muted">Keep track of requests you made on any website, then check back for follow-ups and reappearance. A personal profile is optional.</p>
+{% if request.query_params.get('saved') == '1' %}<div class="banner" role="status">Removal record saved.</div>{% endif %}
+{% if request.query_params.get('deleted') == '1' %}<div class="banner" role="status">Removal record deleted.</div>{% endif %}
+<div class="history-summary">
+    <span><strong>{{ counts.total }}</strong> records</span>
+    <a href="/history?due=follow_up"><strong>{{ counts.follow_up }}</strong> follow-ups due</a>
+    <a href="/history?due=recheck"><strong>{{ counts.recheck }}</strong> rechecks due</a>
+</div>
+<p><a class="btn" href="/history/new">Add removal record</a></p>
+{% if counts.total %}
+<form class="filters" method="get" action="/history">
+    <label>Status
+        <select name="status">
+            <option value="">All statuses</option>
+            {% for value, label in statuses.items() %}<option value="{{ value }}" {% if selected_status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+    </label>
+    <label>Due dates
+        <select name="due">
+            <option value="">All records</option>
+            <option value="follow_up" {% if selected_due == 'follow_up' %}selected{% endif %}>Follow-ups due</option>
+            <option value="recheck" {% if selected_due == 'recheck' %}selected{% endif %}>Rechecks due</option>
+        </select>
+    </label>
+    <button type="submit">Filter</button>
+    {% if selected_status or selected_due %}<a href="/history">Clear filters</a>{% endif %}
+</form>
+<p class="muted">Showing {{ records|length }} of {{ counts.total }} records. Due dates include today. Move or clear a date after completing its task.</p>
+{% endif %}
+{% if records %}
+<div class="table-wrap">
+<table>
+    <thead><tr><th>Website</th><th>Request</th><th>Outcome</th><th>Follow up</th><th>Recheck</th><th>Actions</th></tr></thead>
+    <tbody>
+    {% for record in records %}
+    <tr>
+        <td>
+            <strong>{{ record.site_name }}</strong>
+            {% if record.listing_url %}<p><a href="{{ record.listing_url }}" target="_blank" rel="noopener noreferrer">Open listing</a></p>{% endif %}
+            <details><summary>Details</summary>
+                <dl>
+                    <dt>Last checked</dt><dd>{{ record.last_checked_date or 'Not recorded' }}</dd>
+                    <dt>Evidence</dt><dd>{% if record.evidence_url %}<a href="{{ record.evidence_url }}" target="_blank" rel="noopener noreferrer">Open evidence</a>{% else %}Not recorded{% endif %}</dd>
+                    <dt>Notes</dt><dd class="history-notes">{{ record.notes or 'No notes' }}</dd>
+                </dl>
+            </details>
+        </td>
+        <td data-label="Request">{{ record.request_date or 'Not recorded' }}<br><span class="muted">{{ methods[record.method] }}</span></td>
+        <td data-label="Outcome">{{ statuses[record.status] }}</td>
+        <td data-label="Follow up">{{ record.follow_up_date or 'Not set' }}{% if record.follow_up_date and record.follow_up_date <= today %} <strong class="history-due">Due</strong>{% endif %}</td>
+        <td data-label="Recheck">{{ record.recheck_date or 'Not set' }}{% if record.recheck_date and record.recheck_date <= today %} <strong class="history-due">Due</strong>{% endif %}</td>
+        <td data-label="Actions"><a href="/history/{{ record.id }}/edit">Edit</a></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+</table>
+</div>
+{% elif counts.total %}
+<div class="banner">No records match these filters. <a href="/history">Show all records</a>.</div>
+{% else %}
+<div class="banner">No removal records yet. Record a request you have already made, or a website you want to follow up on.</div>
+{% endif %}
+{% endblock %}

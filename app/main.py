@@ -4,14 +4,16 @@ and IMAP-driven review queue. Server-rendered HTML, no front-end framework.
 import json
 import threading
 from collections import Counter
+from datetime import date
 
 from fastapi import BackgroundTasks, FastAPI, Form, Request as HttpRequest
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from .security import LocalBrowserProtection
+from . import removal_history
 
 from . import db, fetcher, inbox, ratelimit, scan_service, scanner, send_service, sender, templater
 from .config import ROOT, load_config
@@ -745,3 +747,95 @@ def poll_inbox():
         return RedirectResponse(f"/?{msg}", status_code=303)
     finally:
         conn.close()
+
+
+# Manual records are independent of broker automation and personal profiles.
+@app.get("/history", response_class=HTMLResponse)
+def removal_history_page(request: HttpRequest, status: str = "", due: str = ""):
+    conn = get_conn()
+    try:
+        records = db.removal_records(conn)
+    finally:
+        conn.close()
+    today = date.today().isoformat()
+    counts = {
+        "total": len(records),
+        "follow_up": sum(removal_history.is_due(r["follow_up_date"], today) for r in records),
+        "recheck": sum(removal_history.is_due(r["recheck_date"], today) for r in records),
+    }
+    selected_status = status if status in removal_history.STATUSES else ""
+    selected_due = due if due in {"follow_up", "recheck"} else ""
+    rows = [r for r in records if not selected_status or r["status"] == selected_status]
+    if selected_due:
+        rows = [r for r in rows if removal_history.is_due(r[selected_due + "_date"], today)]
+        rows.sort(key=lambda r: (r[selected_due + "_date"], r["site_name"].casefold(), r["id"]))
+    return views.TemplateResponse(request=request, name="removal_history.html", context={
+        "records": rows, "counts": counts, "today": today,
+        "statuses": removal_history.STATUSES, "methods": removal_history.METHODS,
+        "selected_status": selected_status, "selected_due": selected_due,
+    })
+
+
+def removal_record_form(request, record=None, errors=None, status_code=200):
+    values = record if record is not None else dict.fromkeys(removal_history.FIELDS, "")
+    if record is None:
+        values["status"] = "requested"
+    return views.TemplateResponse(request=request, name="removal_record_form.html", context={
+        "record": values, "errors": errors or {}, "statuses": removal_history.STATUSES,
+        "methods": removal_history.METHODS,
+    }, status_code=status_code)
+
+
+@app.get("/history/new", response_class=HTMLResponse)
+def new_removal_record(request: HttpRequest):
+    return removal_record_form(request)
+
+
+@app.get("/history/{record_id}/edit", response_class=HTMLResponse)
+def edit_removal_record(request: HttpRequest, record_id: int):
+    conn = get_conn()
+    try:
+        record = db.get_removal_record(conn, record_id)
+    finally:
+        conn.close()
+    if record is None:
+        return PlainTextResponse("Removal record not found.", status_code=404)
+    return removal_record_form(request, record)
+
+
+async def persist_removal_record(request, record_id=None):
+    data, errors = removal_history.validate(await request.form())
+    conn = get_conn()
+    try:
+        if record_id is not None and db.get_removal_record(conn, record_id) is None:
+            return PlainTextResponse("Removal record not found.", status_code=404)
+        if errors:
+            if record_id is not None:
+                data["id"] = record_id
+            return removal_record_form(request, data, errors, status_code=422)
+        db.save_removal_record(conn, data, record_id)
+    finally:
+        conn.close()
+    return RedirectResponse("/history?saved=1", status_code=303)
+
+
+@app.post("/history")
+async def create_removal_record(request: HttpRequest):
+    return await persist_removal_record(request)
+
+
+@app.post("/history/{record_id}")
+async def update_removal_record(request: HttpRequest, record_id: int):
+    return await persist_removal_record(request, record_id)
+
+
+@app.post("/history/{record_id}/delete")
+def delete_removal_record(record_id: int):
+    conn = get_conn()
+    try:
+        if db.get_removal_record(conn, record_id) is None:
+            return PlainTextResponse("Removal record not found.", status_code=404)
+        db.delete_removal_record(conn, record_id)
+    finally:
+        conn.close()
+    return RedirectResponse("/history?deleted=1", status_code=303)
