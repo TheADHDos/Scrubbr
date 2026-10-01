@@ -93,6 +93,27 @@ Reinstall dependencies with `pip install -r requirements.txt`; the tested resolv
 Python environment is pinned in `requirements.lock.txt`. After changing Playwright,
 rerun `playwright install chromium` with the same `PLAYWRIGHT_BROWSERS_PATH`.
 
+### Manual removal history
+
+Use **Removal history** to record work already done on any website, including
+sites outside the broker directory. No personal profile is required. Add a site,
+optional listing/evidence URLs, request date and method, outcome, notes, last
+checked date, and follow-up/recheck dates. A site can have multiple records for
+separate removal attempts.
+
+The page shows due follow-ups and rechecks (including today), with status/date
+filters. After completing a task, edit its date to move or clear it. These dates
+are displayed in the tracker; there is no background scheduler or notification
+service. Saving a record does not contact a site or send email. External links
+are opened only when you click them.
+
+Records live in the unencrypted `removal_records` table in `scrubbr.db`. Links
+and notes may identify you. Avoid passwords or verification codes. "Removal
+confirmed" means the site acknowledged it; "Removal independently verified"
+means you checked the listing. Existing broker request/status tracking remains
+separate. Editing replaces a record's fields; this first version does not keep
+an audit log of edits, so use another record for a separate removal attempt.
+
 ### Optional: inbox monitoring
 
 Copy `config.example.toml` to `config.toml`, set `[imap] enabled = true`, and

@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit' if record.get('id') else 'Add' }} removal record &middot; Scrubbr{% endblock %}
+{% block body %}
+<p><a href="/history">&larr; Removal history</a></p>
+<h1>{{ 'Edit' if record.get('id') else 'Add' }} removal record</h1>
+<p class="muted">Stored locally without encryption. Listing and evidence links may identify you; avoid passwords or verification codes in notes.</p>
+{% if errors %}
+<div class="banner warn" role="alert">
+    Please correct the highlighted fields. Your entries are preserved.
+</div>
+{% endif %}
+{% macro field_error(name) %}{% if name in errors %}<span class="history-error" id="{{ name }}-error">{{ errors[name] }}</span>{% endif %}{% endmacro %}
+{% macro input(name, label, type='text', required=false, maxlength=2048) %}
+<label>{{ label }}
+    <input type="{{ type }}" name="{{ name }}" value="{{ record[name] }}" maxlength="{{ maxlength }}" {% if required %}required{% endif %} {% if name in errors %}aria-invalid="true" aria-describedby="{{ name }}-error"{% endif %}>
+    {{ field_error(name) }}
+</label>
+{% endmacro %}
+<form method="post" action="{{ '/history/' ~ record.id if record.get('id') else '/history' }}" class="profile">
+    <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
+    {{ input('site_name', 'Website name (required)', required=true, maxlength=200) }}
+    {{ input('listing_url', 'Listing URL (optional)', type='url') }}
+    {{ input('request_date', 'Request date (optional)', type='date') }}
+    <label>Removal method
+        <select name="method" {% if 'method' in errors %}aria-invalid="true" aria-describedby="method-error"{% endif %}>
+            {% for value, label in methods.items() %}<option value="{{ value }}" {% if record.method == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+        {{ field_error('method') }}
+    </label>
+    <label>Outcome
+        <select name="status" {% if 'status' in errors %}aria-invalid="true" aria-describedby="status-error"{% endif %}>
+            {% for value, label in statuses.items() %}<option value="{{ value }}" {% if record.status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+        {{ field_error('status') }}
+        <span class="muted">Confirmed means the site acknowledged removal. Independently verified means you checked the listing yourself.</span>
+    </label>
+    {{ input('evidence_url', 'Confirmation or evidence URL (optional)', type='url') }}
+    {{ input('last_checked_date', 'Last checked date (optional)', type='date') }}
+    {{ input('follow_up_date', 'Follow-up date (optional)', type='date') }}
+    {{ input('recheck_date', 'Next recheck date (optional)', type='date') }}
+    <label>Notes (optional)
+        <textarea name="notes" rows="5" maxlength="10000" {% if 'notes' in errors %}aria-invalid="true" aria-describedby="notes-error"{% endif %}>{{ record.notes }}</textarea>
+        {{ field_error('notes') }}
+    </label>
+    <button type="submit">Save removal record</button>
+    <a href="/history">Cancel</a>
+</form>
+{% if record.get('id') %}
+<form class="history-delete" method="post" action="/history/{{ record.id }}/delete" onsubmit="return confirm('Delete this removal record? This cannot be undone.');">
+    <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
+    <button class="btn-secondary" type="submit">Delete record</button>
+</form>
+{% endif %}
+{% endblock %}

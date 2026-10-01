@@ -102,7 +102,9 @@ class LocalBrowserProtection:
                     (b"cache-control", b"no-store"),
                     (b"x-frame-options", b"DENY"),
                     (b"x-content-type-options", b"nosniff"),
-                    (b"referrer-policy", b"no-referrer"),
+                    # no-referrer turns same-origin navigation POSTs into Origin:null
+                    # in Chromium. Keep local origins while suppressing foreign referrers.
+                    (b"referrer-policy", b"same-origin"),
                     (b"content-security-policy", b"frame-ancestors 'none'; form-action 'self'; base-uri 'self'"),
                 ])
                 if not valid_cookie:

@@ -112,7 +112,7 @@ def test_browser_security_headers_and_cookie(browser):
     response = browser.get("/profiles")
     assert response.headers["Cache-Control"] == "no-store"
     assert response.headers["X-Frame-Options"] == "DENY"
-    assert response.headers["Referrer-Policy"] == "no-referrer"
+    assert response.headers["Referrer-Policy"] == "same-origin"
     assert "form-action 'self'" in response.headers["Content-Security-Policy"]
     cookie = response.headers["Set-Cookie"]
     assert "HttpOnly" in cookie and "SameSite=strict" in cookie
