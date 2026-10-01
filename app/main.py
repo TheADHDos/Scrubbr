@@ -9,6 +9,9 @@ from fastapi import BackgroundTasks, FastAPI, Form, Request as HttpRequest
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.middleware.trustedhost import TrustedHostMiddleware
+
+from .security import LocalBrowserProtection
 
 from . import db, fetcher, inbox, ratelimit, scan_service, scanner, send_service, sender, templater
 from .config import ROOT, load_config
@@ -33,7 +36,13 @@ from .models import (
     row_visible,
 )
 
-app = FastAPI(title="Scrubbr")
+app = FastAPI(
+    title="Scrubbr", docs_url=None, redoc_url=None, openapi_url=None,
+    telemetry={"tracing": False, "metrics": False, "logs": False,
+               "operation_spans": False, "auto_configure": False},
+)
+app.add_middleware(LocalBrowserProtection)
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost"], www_redirect=False)
 app.mount("/static", StaticFiles(directory=str(ROOT / "app" / "static")), name="static")
 views = Jinja2Templates(directory=str(ROOT / "app" / "templates"))
 
@@ -145,7 +154,7 @@ def dashboard(request: HttpRequest, profile_id: str = "", show_all: str = "", so
             "next_due": lambda t: t[2].next_due,
         })
         cfg = load_config()
-        return views.TemplateResponse("dashboard.html", {
+        return views.TemplateResponse(request=request, name="dashboard.html", context={
             "request": request, "rows": rows, "counts": counts,
             "hidden": len(all_rows) - len(rows), "show_all": bool(show_all),
             "total": len(brokers), "due_brokers": due_brokers,
@@ -201,7 +210,7 @@ def broker_list(request: HttpRequest, category: str = "", status: str = "",
             "status": lambda t: _STATUS_RANK[t[2].status],
         })
         categories = sorted({b.category for b in brokers})
-        return views.TemplateResponse("brokers.html", {
+        return views.TemplateResponse(request=request, name="brokers.html", context={
             "request": request, "rows": rows, "categories": categories,
             "sel_category": category, "sel_status": status, "sel_exposure": exposure,
             "sel_name": name,
@@ -243,7 +252,7 @@ def broker_detail(request: HttpRequest, broker_id: int, profile_id: str = ""):
                 "exposure": effective_exposure(broker, exposures.get(broker_id), found_networks(brokers, exposures)),
                 "search_link": search_link,
             })
-        return views.TemplateResponse("broker_detail.html", {
+        return views.TemplateResponse(request=request, name="broker_detail.html", context={
             "request": request, "broker": broker, "entries": entries,
             "is_form": broker.contact_method == CONTACT_FORM,
             "profiles": profiles, "selected_profile": selected, "multi_profile": len(profiles) > 1,
@@ -368,7 +377,7 @@ def scan_page(request: HttpRequest, profile_id: str = "", sort: str = "", dir: s
             (b, streak, reason) for b, streak, reason in db.drifting_brokers(conn, DRIFT_STREAK_THRESHOLD)
             if not scan_service.is_skipped(b)
         ]
-        return views.TemplateResponse("scan.html", {
+        return views.TemplateResponse(request=request, name="scan.html", context={
             "request": request, "profile": profile, "profiles": profiles,
             "multi_profile": len(profiles) > 1,
             "groups": groups, "assumed": assumed, "ctx_ready": ctx is not None,
@@ -507,7 +516,7 @@ def send_page(request: HttpRequest, profile_id: str = "", sort: str = "", dir: s
             "exposure": lambda b: _EXPOSURE_RANK[effective_exposure(b, exposures.get(b.id), networks)],
             "result": lambda b: bulk_results.get(b.id, {}).get("status"),
         })
-        return views.TemplateResponse("send.html", {
+        return views.TemplateResponse(request=request, name="send.html", context={
             "request": request, "profile": profile, "profiles": profiles,
             "multi_profile": len(profiles) > 1, "smtp_enabled": smtp_enabled,
             "eligible": eligible,
@@ -599,7 +608,7 @@ def profiles_page(request: HttpRequest, sort: str = "", dir: str = ""):
             "full_name": lambda p: p.full_name.casefold() or None,
             "state": lambda p: p.state.casefold() or None,
         })
-        return views.TemplateResponse("profiles.html", {
+        return views.TemplateResponse(request=request, name="profiles.html", context={
             "request": request, "profiles": profiles, "sort": sort, "dir": dir,
         })
     finally:
@@ -608,7 +617,7 @@ def profiles_page(request: HttpRequest, sort: str = "", dir: str = ""):
 
 @app.get("/profiles/new", response_class=HTMLResponse)
 def new_profile_page(request: HttpRequest):
-    return views.TemplateResponse("profile_form.html", {
+    return views.TemplateResponse(request=request, name="profile_form.html", context={
         "request": request, "profile": Profile(), "is_new": True,
     })
 
@@ -639,7 +648,7 @@ def edit_profile_page(request: HttpRequest, profile_id: int):
         profile = db.get_profile(conn, profile_id)
         if profile is None:
             return RedirectResponse("/profiles", status_code=303)
-        return views.TemplateResponse("profile_form.html", {
+        return views.TemplateResponse(request=request, name="profile_form.html", context={
             "request": request, "profile": profile, "is_new": False,
         })
     finally:
@@ -691,7 +700,7 @@ def review_page(request: HttpRequest):
                     broker = db.get_broker(conn, req.broker_id)
                     profile = db.get_profile(conn, req.profile_id)
             enriched.append({**m, "broker": broker, "profile": profile})
-        return views.TemplateResponse("review.html", {
+        return views.TemplateResponse(request=request, name="review.html", context={
             "request": request, "items": enriched, "statuses": STATUS_LABELS,
             "profiles": profiles, "brokers": db.all_brokers(conn),
         })

@@ -104,7 +104,7 @@ class FakeImapClient:
 
 def _install_fake_client(monkeypatch, messages: dict[bytes, bytes]) -> FakeImapClient:
     client = FakeImapClient(messages)
-    monkeypatch.setattr(imaplib, "IMAP4_SSL", lambda host, port: client)
+    monkeypatch.setattr(imaplib, "IMAP4_SSL", lambda host, port, **kwargs: client)
     return client
 
 

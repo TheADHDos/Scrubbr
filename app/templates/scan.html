@@ -36,6 +36,7 @@ Requests go straight from this machine to the broker, at a slow, human-like pace
     Low-confidence matches show as "Possible match" for you to confirm or dismiss.</p>
     <div class="actions">
         <form method="post" action="/scan/all">
+            <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
             <input type="hidden" name="profile_id" value="{{ profile.id }}">
             <button type="submit" {% if bulk and bulk.running %}disabled{% endif %}>Scan all</button>
         </form>
@@ -61,6 +62,7 @@ Requests go straight from this machine to the broker, at a slow, human-like pace
                 <td data-label="Actions">
                     {% if not row.manual_only %}
                     <form method="post" action="/scan/{{ row.broker.id }}/auto">
+                        <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
                         <input type="hidden" name="profile_id" value="{{ profile.id }}">
                         <button type="submit" {% if bulk and bulk.running %}disabled{% endif %}>
                             {{ 'Re-scan' if row.status not in ('unknown', 'likely') else 'Scan' }}

@@ -22,6 +22,7 @@ generated for one profile, or all of them, from a broker's page.</p>
                 <a href="/profiles/{{ p.id }}/edit">Edit</a>
                 <form method="post" action="/profiles/{{ p.id }}/delete" style="display:inline"
                       onsubmit="return confirm('Delete {{ p.name }}? This also removes all of its tracked requests.')">
+                    <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
                     <button type="submit" class="btn-link">Delete</button>
                 </form>
             </td>

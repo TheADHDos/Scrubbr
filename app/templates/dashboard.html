@@ -50,6 +50,7 @@
 
 <section class="inbox-bar">
     <form method="post" action="/inbox/poll">
+        <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
         <button type="submit" {% if not imap_enabled %}disabled title="Enable IMAP in config.toml"{% endif %}>
             Check inbox
         </button>

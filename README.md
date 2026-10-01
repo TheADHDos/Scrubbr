@@ -7,8 +7,8 @@ your personal data on your own machine.
 Incogni is a paid service that acts as your *authorized agent* to get your data
 deleted from ~400+ data brokers under CCPA/GDPR. This tool does the same job
 locally. Because **you** are the data subject (not a third-party agent), your
-requests carry full legal weight with no authorization paperwork, and your PII
-never leaves your computer.
+requests carry full legal weight with no authorization paperwork, and you control which identifiers are included. Profiles are stored locally;
+broker searches and removal requests disclose identifiers to their recipients.
 
 ## What it does (v1)
 
@@ -57,10 +57,41 @@ python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 .venv/bin/playwright install chromium         # one-time, for exposure scanning
 .venv/bin/python -m scripts.seed_brokers      # load broker registry
-.venv/bin/uvicorn app.main:app --port 3000    # http://127.0.0.1:3000
+.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 3000 --no-proxy-headers --no-access-log    # http://127.0.0.1:3000
 ```
 
-Then open the dashboard, fill in your **Profile**, and work through the brokers.
+Then open the dashboard. Add a **Profile** only when you are ready to store
+identifying information locally and share selected details with brokers.
+
+### Local security and privacy
+
+Run one server process, bound to `127.0.0.1`. Only `127.0.0.1` and `localhost`
+Host headers are accepted. POST forms require a signed browser CSRF cookie and
+matching hidden token; explicit foreign origins/referers are rejected. Cookies
+are host-only, HttpOnly and SameSite=Strict. Reload forms after restarting the
+server: the signing key changes on restart. Direct scripts posting forms must
+first GET a page and retain its cookie/token. Forms are limited to 1 MiB.
+
+IMAP, SMTP STARTTLS and implicit SMTP TLS validate server certificates and
+hostnames using the system trust configuration. There is no insecure fallback.
+Email remains disabled unless explicitly enabled in `config.toml`.
+
+Profiles, listings and email metadata in SQLite are **not encrypted**. Email
+passwords in `config.toml` are **plaintext**; Keychain storage is not implemented.
+Git exclusions help prevent accidental commits but do not protect backups or
+other local users. Browser request protections are not login authentication.
+
+Scanning sends first/last name and any city/state URL fields to broker websites;
+their scripts and trackers can receive browser metadata and query details.
+Removal email templates include the profile identifiers that you supply,
+including DOB when present. Review requests before sending. IMAP reads recent
+messages in the selected folder; use a dedicated mailbox/folder if enabled.
+API documentation pages are disabled to avoid external CDN assets, and native
+FastAPI telemetry is disabled. Static fonts/CSS remain local.
+
+Reinstall dependencies with `pip install -r requirements.txt`; the tested resolved
+Python environment is pinned in `requirements.lock.txt`. After changing Playwright,
+rerun `playwright install chromium` with the same `PLAYWRIGHT_BROWSERS_PATH`.
 
 ### Optional: inbox monitoring
 

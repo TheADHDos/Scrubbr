@@ -18,6 +18,7 @@ couldn't tie them to a request, or the wording was ambiguous. Resolve each one m
         {% if m.broker %}&middot; matched broker: {{ m.broker.name }}{% else %}&middot; no matched broker{% endif %}
         {% if m.profile %}&middot; profile: {{ m.profile.name }}{% endif %}</p>
     <form method="post" action="/review/resolve" class="review-form">
+        <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
         <input type="hidden" name="message_id" value="{{ m.message_id }}">
         <select name="broker_id" required>
             <option value="" {% if not m.broker %}selected{% endif %} disabled>Select broker&hellip;</option>
