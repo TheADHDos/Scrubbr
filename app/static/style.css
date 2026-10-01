@@ -748,6 +748,7 @@ dd {
 
 .history-summary { display: flex; gap: var(--space-4); flex-wrap: wrap; margin: var(--space-4) 0; }
 .history-notes { white-space: pre-wrap; overflow-wrap: anywhere; }
+.guidance-url { overflow-wrap: anywhere; }
 .history-due, .history-error { color: var(--stamp); }
 .history-delete { margin-top: var(--space-5); }
 [aria-invalid="true"] { border-color: var(--stamp); }

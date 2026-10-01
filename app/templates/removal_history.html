@@ -11,6 +11,25 @@
     <a href="/history?due=recheck"><strong>{{ counts.recheck }}</strong> rechecks due</a>
 </div>
 <p><a class="btn" href="/history/new">Add removal record</a></p>
+<section aria-label="Manual action queue">
+<h2>Due this week</h2>
+<p class="muted">Next seven local calendar dates: {{ today }} through {{ week_end }}. Follow-ups and rechecks are manual. Open a record, follow its notes, then record your update and move or clear its date.</p>
+{% for group, title in [('overdue', 'Overdue'), ('week', 'Due this week')] %}
+<h3>{{ title }}</h3>
+{% if queue[group] %}
+<div class="table-wrap"><table class="weekly-queue">
+    <thead><tr><th>Website</th><th>Status</th><th>Due date</th><th>Action</th></tr></thead>
+    <tbody>{% for action in queue[group] %}<tr>
+        <td><a href="/history/{{ action.record.id }}/edit">{{ action.record.site_name }}</a></td>
+        <td data-label="Status">{{ statuses[action.record.status] }}</td>
+        <td data-label="Due date">{{ action.date }}</td>
+        <td data-label="Action">{{ 'Follow up' if action.kind == 'follow_up' else 'Recheck' }}</td>
+    </tr>{% endfor %}</tbody>
+</table></div>
+{% else %}<p>{{ 'No overdue actions.' if group == 'overdue' else 'No actions due in the next seven dates.' }}</p>{% endif %}
+{% endfor %}
+<p class="muted">Records with no dates or dates after this window remain in the list below; no action is currently due.</p>
+</section>
 {% if counts.total %}
 <form class="filters" method="get" action="/history">
     <label>Status

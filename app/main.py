@@ -3,8 +3,11 @@ and IMAP-driven review queue. Server-rendered HTML, no front-end framework.
 """
 import json
 import threading
+import os
+from contextlib import asynccontextmanager
 from collections import Counter
-from datetime import date
+from datetime import timedelta
+from zoneinfo import ZoneInfoNotFoundError
 
 from fastapi import BackgroundTasks, FastAPI, Form, Request as HttpRequest
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, PlainTextResponse
@@ -13,10 +16,11 @@ from fastapi.templating import Jinja2Templates
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from .security import LocalBrowserProtection
-from . import removal_history
+from . import removal_history, broker_guidance
 
 from . import db, fetcher, inbox, ratelimit, scan_service, scanner, send_service, sender, templater
-from .config import ROOT, load_config
+from .config import ROOT, DEFAULT_DB_PATH, load_config
+from .storage import database_lock
 from .models import (
     DRIFT_STREAK_THRESHOLD,
     EXPOSURE_ASSUMED,
@@ -38,7 +42,14 @@ from .models import (
     row_visible,
 )
 
+@asynccontextmanager
+async def lifespan(app):
+    with database_lock(DEFAULT_DB_PATH):
+        yield
+
+
 app = FastAPI(
+    lifespan=lifespan,
     title="Scrubbr", docs_url=None, redoc_url=None, openapi_url=None,
     telemetry={"tracing": False, "metrics": False, "logs": False,
                "operation_spans": False, "auto_configure": False},
@@ -47,6 +58,17 @@ app.add_middleware(LocalBrowserProtection)
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost"], www_redirect=False)
 app.mount("/static", StaticFiles(directory=str(ROOT / "app" / "static")), name="static")
 views = Jinja2Templates(directory=str(ROOT / "app" / "templates"))
+
+
+@app.middleware("http")
+async def manual_only_guard(request, call_next):
+    path = request.url.path
+    if os.environ.get("SCRUBBR_MANUAL_ONLY") == "1" and (
+        path in {"/scan/all", "/send/all", "/inbox/poll"}
+        or (path.startswith("/scan/") and path.endswith("/auto"))
+    ):
+        return PlainTextResponse("External actions are disabled in manual-only mode.", status_code=403)
+    return await call_next(request)
 
 def asset_version() -> str:
     """Cache-bust the stylesheet: StaticFiles sends no Cache-Control, so without
@@ -757,7 +779,12 @@ def removal_history_page(request: HttpRequest, status: str = "", due: str = ""):
         records = db.removal_records(conn)
     finally:
         conn.close()
-    today = date.today().isoformat()
+    try:
+        local_date = removal_history.local_today(load_config())
+    except (ZoneInfoNotFoundError, ValueError, TypeError):
+        return PlainTextResponse("Set [app].timezone to a valid IANA timezone, or leave it empty for the Mac's local timezone.", status_code=503)
+    today = local_date.isoformat()
+    queue = removal_history.weekly_actions(records, local_date)
     counts = {
         "total": len(records),
         "follow_up": sum(removal_history.is_due(r["follow_up_date"], today) for r in records),
@@ -773,6 +800,7 @@ def removal_history_page(request: HttpRequest, status: str = "", due: str = ""):
         "records": rows, "counts": counts, "today": today,
         "statuses": removal_history.STATUSES, "methods": removal_history.METHODS,
         "selected_status": selected_status, "selected_due": selected_due,
+        "queue": queue, "week_end": (local_date + timedelta(days=6)).isoformat(),
     })
 
 
@@ -780,15 +808,56 @@ def removal_record_form(request, record=None, errors=None, status_code=200):
     values = record if record is not None else dict.fromkeys(removal_history.FIELDS, "")
     if record is None:
         values["status"] = "requested"
+    conn = get_conn()
+    try:
+        brokers = db.all_brokers(conn)
+        history = db.removal_record_history(conn, values["id"]) if values.get("id") else []
+    finally:
+        conn.close()
+    catalog = broker_guidance.load_catalog()
+    selected_broker = next((b for b in brokers if str(b.id) == values["broker_id"]), None)
+    guide = broker_guidance.guide_for(catalog, selected_broker.name if selected_broker else values["site_name"])
     return views.TemplateResponse(request=request, name="removal_record_form.html", context={
         "record": values, "errors": errors or {}, "statuses": removal_history.STATUSES,
         "methods": removal_history.METHODS,
+        "brokers": brokers, "history": history, "check_outcomes": removal_history.CHECK_OUTCOMES,
+        "guide": guide, "catalog": catalog, "guide_priorities": broker_guidance.PRIORITIES,
+        "guide_flags": broker_guidance.FLAGS,
     }, status_code=status_code)
 
 
 @app.get("/history/new", response_class=HTMLResponse)
-def new_removal_record(request: HttpRequest):
-    return removal_record_form(request)
+def new_removal_record(request: HttpRequest, guide: str = ""):
+    if not guide:
+        return removal_record_form(request)
+    catalog = broker_guidance.load_catalog()
+    selected = next((entry for entry in catalog["entries"] if entry["id"] == guide), None)
+    if selected is None:
+        return PlainTextResponse("Opt-out guide not found.", status_code=404)
+    values = dict.fromkeys(removal_history.FIELDS, "")
+    values.update(site_name=selected["name"], status="not_requested")
+    conn = get_conn()
+    try:
+        matches = [b for b in db.all_brokers(conn) if broker_guidance.normalize(b.name) == selected["id"]]
+        if len(matches) == 1:
+            values.update(site_name=matches[0].name, broker_id=str(matches[0].id))
+    finally:
+        conn.close()
+    return removal_record_form(request, values)
+
+
+@app.get("/guidance", response_class=HTMLResponse)
+def opt_out_guidance(request: HttpRequest):
+    catalog = broker_guidance.load_catalog()
+    return views.TemplateResponse(request=request, name="broker_guidance.html", context={
+        "catalog": catalog, "guide_priorities": broker_guidance.PRIORITIES,
+        "guide_flags": broker_guidance.FLAGS,
+    })
+
+
+@app.get("/guidance/license", response_class=PlainTextResponse)
+def guidance_license():
+    return PlainTextResponse(broker_guidance.load_catalog()["source_license"])
 
 
 @app.get("/history/{record_id}/edit", response_class=HTMLResponse)
@@ -809,6 +878,13 @@ async def persist_removal_record(request, record_id=None):
     try:
         if record_id is not None and db.get_removal_record(conn, record_id) is None:
             return PlainTextResponse("Removal record not found.", status_code=404)
+        if data["broker_id"] and "broker_id" not in errors:
+            broker = db.get_broker(conn, int(data["broker_id"]))
+            if broker is None:
+                errors["broker_id"] = "Choose an existing broker or a custom site."
+            else:
+                data["site_name"] = broker.name
+                errors.pop("site_name", None)
         if errors:
             if record_id is not None:
                 data["id"] = record_id
