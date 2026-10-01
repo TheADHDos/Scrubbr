@@ -1,9 +1,17 @@
 {% extends "base.html" %}
+{% from "_broker_guidance.html" import show_guide %}
 {% block title %}{{ 'Edit' if record.get('id') else 'Add' }} removal record &middot; Scrubbr{% endblock %}
 {% block body %}
 <p><a href="/history">&larr; Removal history</a></p>
 <h1>{{ 'Edit' if record.get('id') else 'Add' }} removal record</h1>
 <p class="muted">Stored locally without encryption. Listing and evidence links may identify you; avoid passwords or verification codes in notes.</p>
+{% if guide %}
+<details class="record-guidance"><summary>Manual opt-out guidance for {{ guide.name }}</summary>
+    {{ show_guide(guide, catalog, guide_priorities, guide_flags) }}
+</details>
+{% else %}
+<p><a href="/guidance">Browse reviewed opt-out guidance</a> before choosing a site.</p>
+{% endif %}
 {% if errors %}
 <div class="banner warn" role="alert">
     Please correct the highlighted fields. Your entries are preserved.

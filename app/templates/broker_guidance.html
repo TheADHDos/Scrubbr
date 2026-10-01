@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% from "_broker_guidance.html" import show_guide %}
+{% block title %}Opt-out guide &middot; Scrubbr{% endblock %}
+{% block body %}
+<h1>Opt-out guide</h1>
+<p>{{ catalog.entries|length }} guides from a reviewed local copy of BADBOOL. Expand a site for manual instructions, then record activity in the tracker. No profile or email configuration is needed.</p>
+<p class="muted">Confirm the site lists your information before sharing additional identifiers. Review each requirement yourself; saving or viewing a guide never contacts a broker. External sites open only when you click a link.</p>
+<p class="muted">Imported guidance is licensed under CC BY-NC-SA 4.0, separately from Scrubbr's MIT code. <a href="/guidance/license">Read the source license</a>.</p>
+{% for guide in catalog.entries %}
+<section id="{{ guide.id }}">
+    <h2>{{ guide.name }}</h2>
+    <details><summary>{{ guide_priorities[guide.priority] }} — manual instructions</summary>
+        {{ show_guide(guide, catalog, guide_priorities, guide_flags) }}
+    </details>
+    <p><a href="/history/new?guide={{ guide.id }}">Record activity for {{ guide.name }}</a></p>
+</section>
+{% endfor %}
+<h2>Directory entries to review</h2>
+<p class="muted">These are source-reported changes, not a live determination that a broker has stopped operating. Your existing brokers and removal history are preserved.</p>
+{% for flag in catalog.review_flags %}
+<details><summary>{{ flag.broker_name }}</summary><p>{{ flag.note }}</p>
+    <p><a href="{{ catalog.upstream }}/blob/{{ flag.revision }}/README.md" target="_blank" rel="noopener noreferrer">Source revision {{ flag.revision[:12] }}</a></p>
+</details>
+{% endfor %}
+{% endblock %}

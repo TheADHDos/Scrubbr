@@ -16,7 +16,7 @@ from fastapi.templating import Jinja2Templates
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from .security import LocalBrowserProtection
-from . import removal_history
+from . import removal_history, broker_guidance
 
 from . import db, fetcher, inbox, ratelimit, scan_service, scanner, send_service, sender, templater
 from .config import ROOT, DEFAULT_DB_PATH, load_config
@@ -814,16 +814,50 @@ def removal_record_form(request, record=None, errors=None, status_code=200):
         history = db.removal_record_history(conn, values["id"]) if values.get("id") else []
     finally:
         conn.close()
+    catalog = broker_guidance.load_catalog()
+    selected_broker = next((b for b in brokers if str(b.id) == values["broker_id"]), None)
+    guide = broker_guidance.guide_for(catalog, selected_broker.name if selected_broker else values["site_name"])
     return views.TemplateResponse(request=request, name="removal_record_form.html", context={
         "record": values, "errors": errors or {}, "statuses": removal_history.STATUSES,
         "methods": removal_history.METHODS,
         "brokers": brokers, "history": history, "check_outcomes": removal_history.CHECK_OUTCOMES,
+        "guide": guide, "catalog": catalog, "guide_priorities": broker_guidance.PRIORITIES,
+        "guide_flags": broker_guidance.FLAGS,
     }, status_code=status_code)
 
 
 @app.get("/history/new", response_class=HTMLResponse)
-def new_removal_record(request: HttpRequest):
-    return removal_record_form(request)
+def new_removal_record(request: HttpRequest, guide: str = ""):
+    if not guide:
+        return removal_record_form(request)
+    catalog = broker_guidance.load_catalog()
+    selected = next((entry for entry in catalog["entries"] if entry["id"] == guide), None)
+    if selected is None:
+        return PlainTextResponse("Opt-out guide not found.", status_code=404)
+    values = dict.fromkeys(removal_history.FIELDS, "")
+    values.update(site_name=selected["name"], status="not_requested")
+    conn = get_conn()
+    try:
+        matches = [b for b in db.all_brokers(conn) if broker_guidance.normalize(b.name) == selected["id"]]
+        if len(matches) == 1:
+            values.update(site_name=matches[0].name, broker_id=str(matches[0].id))
+    finally:
+        conn.close()
+    return removal_record_form(request, values)
+
+
+@app.get("/guidance", response_class=HTMLResponse)
+def opt_out_guidance(request: HttpRequest):
+    catalog = broker_guidance.load_catalog()
+    return views.TemplateResponse(request=request, name="broker_guidance.html", context={
+        "catalog": catalog, "guide_priorities": broker_guidance.PRIORITIES,
+        "guide_flags": broker_guidance.FLAGS,
+    })
+
+
+@app.get("/guidance/license", response_class=PlainTextResponse)
+def guidance_license():
+    return PlainTextResponse(broker_guidance.load_catalog()["source_license"])
 
 
 @app.get("/history/{record_id}/edit", response_class=HTMLResponse)

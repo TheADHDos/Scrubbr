@@ -249,6 +249,63 @@ and independently verified only after your own check. Save; no profile or email
 credentials are required. Add a separate record for another attempt. Back up to
 a new encrypted filename after meaningful updates.
 
+### Manual opt-out guidance from BADBOOL
+
+**Opt-out guide** (`/guidance`) uses a reviewed, local, commit-pinned copy of
+[Yael Grauer's Big Ass Data Broker Opt-Out List](https://github.com/yaelwrites/Big-Ass-Data-Broker-Opt-Out-List).
+The initial eight guides cover BeenVerified, CheckPeople, Cyber Background Checks,
+EveryJoe, FamilyTreeNow, Intelius, Spokeo and White Pages. They include source
+priorities, manual instructions, links and phone/identity/cost symbols. A review
+means the published source was inspected; broker procedures were not tested live.
+
+Expand a guide and choose **Record activity**. Existing directory matches reuse
+their broker ID; EveryJoe starts a custom-site record without adding a broker to
+the registry. No request is sent/generated, no dates/evidence are invented, and
+the initial status is **Not requested** until you choose the actual status.
+Guidance also appears on matching record forms, including edits and legacy
+custom records matched by name. Otherwise use the guide link before selecting a
+site. Instructions remain guidance for the current source revision; they are not
+automatically copied into your notes or retained as per-record procedure history.
+
+The source and full license are bundled together with hashes in
+`data/sources/badbool/catalog.json`. Imported/adapted data is **CC BY-NC-SA 4.0**,
+separately from Scrubbr's MIT code; preserve attribution and the noncommercial /
+share-alike terms when redistributing. See [third-party notices](THIRD_PARTY_NOTICES.md).
+The comparison/update command never modifies the broker registry or SQLite.
+Source-reported changes to Radaris, Rehold and Advanced Background Checks appear
+as review flags, preserving all brokers and historical records. Absence from a
+curated list is not evidence that a broker has closed.
+
+From the repository root, inspect the bundled snapshot offline:
+
+```sh
+.venv/bin/python -m scripts.broker_guidance
+```
+
+To review another version, use the full commit SHA from the upstream repository:
+
+```sh
+.venv/bin/python -m scripts.broker_guidance --revision FULL_40_CHARACTER_COMMIT_SHA
+```
+
+Only this explicit option downloads the two pinned source files from GitHub;
+redirects are refused. There are no startup/background downloads or broker calls.
+The command prints the existing directory comparison, source additions/changes/
+removals and the complete proposed guide contents. To inspect a newly suggested
+site, add `--select 'Exact source site name'`. No new guides are selected merely
+because they appear upstream. If an imported guide is removed/renamed, applying
+fails until you deliberately `--deselect 'Old name'` and optionally select the new
+name. Retained review flags keep their original source revision.
+
+After reviewing the proposed text, repeat with `--apply` and type
+`APPLY FULL_40_CHARACTER_COMMIT_SHA` when prompted. Offline selection changes also
+support `--select ... --apply`; the confirmation uses the bundled revision.
+The catalog is validated and atomically replaced; review the Git diff before
+committing. Dates/statuses, personal profiles, credentials, scan configuration,
+and the original `data/brokers.json` are unaffected. Keep the application source
+and its pinned catalog together; encrypted database backups contain records,
+not this public guidance dataset. No new dependency or schema migration is used.
+
 ### Optional: inbox monitoring
 
 Copy `config.example.toml` to `config.toml`, set `[imap] enabled = true`, and

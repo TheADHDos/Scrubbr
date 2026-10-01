@@ -1,0 +1,9 @@
+{% macro show_guide(guide, catalog, priorities, flags) %}
+<p><strong>{{ priorities[guide.priority] }}</strong> — priority assigned by the source.</p>
+{% if guide.flags %}<ul>{% for flag in guide.flags %}<li>{{ flags[flag] }}</li>{% endfor %}</ul>{% endif %}
+<p class="history-notes">{{ guide.instructions }}</p>
+{% if guide.links %}
+<ul>{% for link in guide.links %}<li><a href="{{ link.url }}" target="_blank" rel="noopener noreferrer">{{ link.label }}</a> <span class="muted guidance-url">({{ link.url }})</span></li>{% endfor %}</ul>
+{% endif %}
+<p class="muted">Adapted from <a href="{{ catalog.upstream }}/blob/{{ catalog.revision }}/README.md" target="_blank" rel="noopener noreferrer">{{ catalog.title }}</a> by {{ catalog.creator }}. Revision {{ catalog.revision[:12] }}. <a href="/guidance/license">CC BY-NC-SA 4.0</a>. Reviewed against the source text; broker procedures have not been tested live.</p>
+{% endmacro %}

@@ -40,3 +40,4 @@ restore-staging/
 *.sqlite.lock
 *.sqlite3.lock
 output/playwright/
+.guidance-*.tmp
